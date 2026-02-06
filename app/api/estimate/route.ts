@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 const ESTIMATE_JSON_SCHEMA = `{
   "calories": number,
@@ -127,20 +128,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isProHeader = request.headers.get("x-pro") === "true";
     const deviceIdHeader = request.headers.get("x-device-id") ?? "";
     const deviceId = deviceIdHeader.slice(0, 128);
 
-    // Basic server-side free usage limiter (MVP):
-    // - keyed by anonymous device id from headers/localStorage
-    // - reset per calendar day
-    // - Pro users (x-pro: "true") skip this check
-    //
-    // For real production:
-    // - DO NOT trust headers directly
-    // - use signed tokens / authenticated user ids
-    // - store counts in Redis/DB with proper rate limiting
-    if (!isProHeader && deviceId) {
+    // Pro: skip free-tier limit when user has an active subscription in Supabase
+    let isPro = false;
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const { data: sub } = await supabase
+          .from("subscriptions")
+          .select("id")
+          .eq("user_id", user.id)
+          .in("status", ["active", "trialing"])
+          .limit(1)
+          .maybeSingle();
+        isPro = !!sub;
+      }
+    } catch {
+      // ignore; treat as free
+    }
+
+    if (!isPro && deviceId) {
       const allowed = incrementAndCheckDeviceLimit(deviceId, 5);
       if (!allowed) {
         return NextResponse.json(
@@ -223,6 +233,26 @@ export async function POST(request: NextRequest) {
         { error: "OpenAI response missing required estimate fields" },
         { status: 502 }
       );
+    }
+
+    // Persist to Supabase for logged-in users (best-effort; don't fail the request)
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        await supabase.from("estimates").insert({
+          user_id: user.id,
+          meal: parsed.meal,
+          portion: parsed.portion,
+          details: parsed.details ?? null,
+          calories: result.calories,
+          protein_g: result.protein_g,
+          carbs_g: result.carbs_g,
+          fat_g: result.fat_g,
+        });
+      }
+    } catch {
+      // ignore; estimate still returned to client
     }
 
     return NextResponse.json({ result });

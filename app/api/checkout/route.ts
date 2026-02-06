@@ -1,60 +1,77 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import Stripe from "stripe";
+import { createClient } from "@/lib/supabase/server";
 
-export async function POST(_request: NextRequest) {
+export async function POST() {
   try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user?.id) {
+      return NextResponse.json(
+        { error: "You must be logged in to checkout" },
+        { status: 401 },
+      );
+    }
+
     const secretKey = process.env.STRIPE_SECRET_KEY;
     const priceId = process.env.STRIPE_PRICE_ID;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
-    if (!secretKey || !priceId) {
+    if (!secretKey || secretKey.trim() === "") {
       return NextResponse.json(
-        { error: "Stripe environment variables are not configured" },
+        { error: "STRIPE_SECRET_KEY is not set" },
+        { status: 500 },
+      );
+    }
+    if (!priceId || priceId.trim() === "") {
+      return NextResponse.json(
+        { error: "STRIPE_PRICE_ID is not set" },
+        { status: 500 },
+      );
+    }
+    if (!appUrl || appUrl.trim() === "") {
+      return NextResponse.json(
+        { error: "NEXT_PUBLIC_APP_URL is not set" },
         { status: 500 },
       );
     }
 
-    const params = new URLSearchParams();
-    params.append("mode", "subscription");
-    params.append("line_items[0][price]", priceId);
-    params.append("line_items[0][quantity]", "1");
-    params.append(
-      "success_url",
-      `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-    );
-    params.append("cancel_url", `${appUrl}/pricing`);
+    const stripe = new Stripe(secretKey);
 
-    const stripeResponse = await fetch(
-      "https://api.stripe.com/v1/checkout/sessions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${secretKey}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
         },
-        body: params.toString(),
-      },
-    );
+      ],
+      client_reference_id: user.id,
+      metadata: { user_id: user.id },
+      success_url: `${appUrl}/account?success=1`,
+      cancel_url: `${appUrl}/pricing`,
+    });
 
-    const data = await stripeResponse.json();
-
-    if (!stripeResponse.ok) {
-      const message =
-        (data?.error && (data.error.message as string)) ||
-        `Stripe error: ${stripeResponse.status}`;
-      return NextResponse.json({ error: message }, { status: 500 });
-    }
-
-    if (!data.url || typeof data.url !== "string") {
+    if (!session.url || typeof session.url !== "string") {
       return NextResponse.json(
         { error: "Stripe did not return a checkout URL" },
         { status: 500 },
       );
     }
 
-    return NextResponse.json({ url: data.url });
+    return NextResponse.json({ url: session.url });
   } catch (err) {
+    if (err instanceof Stripe.errors.StripeError) {
+      const message = err.message ?? "Stripe error";
+      const status = err.statusCode && err.statusCode >= 400 && err.statusCode < 600
+        ? err.statusCode
+        : 500;
+      return NextResponse.json({ error: message }, { status });
+    }
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

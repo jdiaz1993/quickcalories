@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import {
   getUsageToday,
   incrementUsageToday,
@@ -52,7 +53,6 @@ export default function Home() {
     setUsageToday(getUsageToday());
     setHistory(getHistory());
     if (typeof window !== "undefined") {
-      setIsPro(window.localStorage.getItem("quickcalories_isPro") === "true");
       const existing = window.localStorage.getItem("quickcalories_device_id");
       if (existing) {
         setDeviceId(existing);
@@ -64,6 +64,23 @@ export default function Home() {
         setDeviceId(newId);
       }
     }
+    async function loadPro() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        setIsPro(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("status", ["active", "trialing"])
+        .limit(1)
+        .maybeSingle();
+      setIsPro(!!data);
+    }
+    void loadPro();
   }, []);
 
   const remaining = isPro ? null : Math.max(0, DAILY_LIMIT - usageToday);
@@ -81,17 +98,9 @@ export default function Home() {
     try {
       const res = await fetch("/api/estimate", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        // For MVP we send an anonymous device id and pro flag for basic
-        // server-side rate limiting. In production this should use
-        // signed tokens and backends like Redis/DB, not just headers.
-        // x-device-id is anonymous and stored only in localStorage.
-        // x-pro is a hint so the server can skip the free-tier limit.
-        // Never trust these headers alone in a real system.
-        ...(deviceId && {
-          "x-device-id": deviceId,
-        }),
-        ...(isPro && { "x-pro": "true" }),
+        ...(deviceId && { "x-device-id": deviceId }),
         body: JSON.stringify({
           meal: targetMeal,
           portion: targetPortion,
@@ -146,16 +155,25 @@ export default function Home() {
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 bg-zinc-50 dark:bg-zinc-950">
       <div className="w-full max-w-md flex flex-col gap-6">
         <header className="flex flex-col gap-1">
-          <div className="flex w-full items-center justify-between">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
-              QuickCalories
-            </h1>
-            <Link
-              href="/pricing"
-              className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
-            >
-              Upgrade
-            </Link>
+          <div className="flex w-full items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
+                QuickCalories
+              </h1>
+              {isPro && (
+                <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200">
+                  Pro
+                </span>
+              )}
+            </div>
+            {!isPro && (
+              <Link
+                href="/pricing"
+                className="shrink-0 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"
+              >
+                Upgrade
+              </Link>
+            )}
           </div>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Estimate calories from your meal description
@@ -217,13 +235,11 @@ export default function Home() {
               className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 outline-none transition-colors focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-500 dark:focus:border-zinc-500 dark:focus:ring-zinc-800"
             />
           </div>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            {isPro
-              ? "Unlimited estimates with Pro"
-              : `${remaining ?? 0} free estimate${
-                  remaining === 1 ? "" : "s"
-                } left today`}
-          </p>
+          {!isPro && (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              {remaining ?? 0} free estimate{remaining === 1 ? "" : "s"} left today
+            </p>
+          )}
           <button
             type="button"
             onClick={() => handleEstimate()}
@@ -329,6 +345,18 @@ export default function Home() {
             </ul>
           </section>
         )}
+
+        <footer className="mt-8 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+            Terms
+          </Link>
+          <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+            Privacy
+          </Link>
+          <Link href="/refunds" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+            Refunds
+          </Link>
+        </footer>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function PricingPage() {
   const [isPro, setIsPro] = useState(false);
@@ -9,15 +10,33 @@ export default function PricingPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    setIsPro(window.localStorage.getItem("quickcalories_isPro") === "true");
+    async function loadPro() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        setIsPro(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("status", ["active", "trialing"])
+        .limit(1)
+        .maybeSingle();
+      setIsPro(!!data);
+    }
+    void loadPro();
   }, []);
 
   async function handleCheckout() {
     try {
       setError(null);
       setLoading(true);
-      const res = await fetch("/api/checkout", { method: "POST" });
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        credentials: "include",
+      });
       const data = await res.json();
       if (!res.ok || !data.url) {
         setError(data.error ?? "Unable to start checkout");
@@ -48,9 +67,17 @@ export default function PricingPage() {
             Choose the plan that fits you
           </p>
           {isPro && (
-            <p className="mt-3 inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
-              You’re Pro
-            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <p className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+                You’re Pro
+              </p>
+              <Link
+                href="/account"
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              >
+                Manage subscription
+              </Link>
+            </div>
           )}
         </header>
 
@@ -121,15 +148,27 @@ export default function PricingPage() {
               disabled={isPro || loading}
               className="mt-5 w-full rounded-xl bg-white px-4 py-3 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800"
             >
-              {isPro ? "You’re Pro" : loading ? "Redirecting…" : "Upgrade to Pro"}
+              {isPro ? "You're Pro" : loading ? "Redirecting…" : "Unlock"}
             </button>
             {error && (
-              <p className="mt-2 text-xs text-red-500 dark:text-red-400">
+              <p className="mt-2 text-xs text-red-500 dark:text-red-400" role="alert">
                 {error}
               </p>
             )}
           </section>
         </div>
+
+        <footer className="mt-8 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+            Terms
+          </Link>
+          <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+            Privacy
+          </Link>
+          <Link href="/refunds" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+            Refunds
+          </Link>
+        </footer>
       </div>
     </div>
   );
