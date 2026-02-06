@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import {
   getUsageToday,
   incrementUsageToday,
@@ -22,6 +21,21 @@ interface EstimateResult {
   notes: string;
 }
 
+function UpgradedBanner() {
+  // Wrapped in Suspense at the call site to satisfy Next.js
+  // requirements for useSearchParams in client components.
+  const params = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : "",
+  );
+  const upgraded = params.get("upgraded") === "1";
+  if (!upgraded) return null;
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+      You’re now on QuickCalories Pro. Enjoy unlimited estimates.
+    </div>
+  );
+}
+
 export default function Home() {
   const [meal, setMeal] = useState("");
   const [portion, setPortion] = useState<PortionSize>("medium");
@@ -33,8 +47,6 @@ export default function Home() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isPro, setIsPro] = useState(false);
   const [deviceId, setDeviceId] = useState("");
-  const searchParams = useSearchParams();
-  const upgraded = searchParams.get("upgraded") === "1";
 
   useEffect(() => {
     setUsageToday(getUsageToday());
@@ -54,9 +66,7 @@ export default function Home() {
     }
   }, []);
 
-  const remaining = isPro
-    ? Infinity
-    : Math.max(0, DAILY_LIMIT - usageToday);
+  const remaining = isPro ? null : Math.max(0, DAILY_LIMIT - usageToday);
   const atLimit = isPro ? false : isLimitReached();
 
   async function handleEstimate(
@@ -152,11 +162,9 @@ export default function Home() {
           </p>
         </header>
 
-        {upgraded && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
-            You’re now on QuickCalories Pro. Enjoy unlimited estimates.
-          </div>
-        )}
+        <Suspense fallback={null}>
+          <UpgradedBanner />
+        </Suspense>
 
         <div className="flex flex-col gap-4">
           <label htmlFor="meal" className="sr-only">
@@ -212,8 +220,8 @@ export default function Home() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             {isPro
               ? "Unlimited estimates with Pro"
-              : `${remaining} free estimate${
-                  remaining !== 1 ? "s" : ""
+              : `${remaining ?? 0} free estimate${
+                  remaining === 1 ? "" : "s"
                 } left today`}
           </p>
           <button
