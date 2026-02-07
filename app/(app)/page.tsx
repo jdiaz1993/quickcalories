@@ -297,6 +297,7 @@ function HomeInner() {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user?.id) return;
+    setSaveError(null);
     const { error } = await supabase.from("estimates").insert({
       user_id: user.id,
       meal: mealVal.trim(),
@@ -309,10 +310,12 @@ function HomeInner() {
       confidence: resultVal.confidence,
       notes: resultVal.notes ?? "",
     });
-    if (!error) {
-      await loadHistory();
-      setSavedToHistory(true);
+    if (error) {
+      setSaveError(`Couldn't save to history: ${error.message}`);
+      return;
     }
+    await loadHistory();
+    setSavedToHistory(true);
   }
 
   async function handleSaveToHistory() {
