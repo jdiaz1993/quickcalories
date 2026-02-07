@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/browser";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,7 +24,7 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      router.push("/");
+      router.push("/account");
       router.refresh();
     } catch {
       setMessage({ type: "error", text: "Something went wrong" });

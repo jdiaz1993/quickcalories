@@ -21,10 +21,6 @@ interface EstimateResult {
   notes: string;
 }
 
-type PortionSize = "small" | "medium" | "large";
-
-const VALID_PORTIONS: PortionSize[] = ["small", "medium", "large"];
-
 // MVP-only in-memory usage tracker for free tier.
 // This lives in-memory per server instance and is NOT suitable for
 // real production use. In a real app, move this to Redis/DB and
@@ -60,6 +56,9 @@ function incrementAndCheckDeviceLimit(deviceId: string, limit: number): boolean 
   return true;
 }
 
+type PortionSize = "small" | "medium" | "large";
+const VALID_PORTIONS: PortionSize[] = ["small", "medium", "large"];
+
 interface ParsedBody {
   meal: string;
   portion: PortionSize;
@@ -71,17 +70,17 @@ function parseBody(body: unknown): ParsedBody | null {
   const o = body as Record<string, unknown>;
   const meal = o.meal;
   if (typeof meal !== "string" || meal.trim() === "") return null;
-  const portion = o.portion;
-  const portionSize: PortionSize =
-    typeof portion === "string" && VALID_PORTIONS.includes(portion as PortionSize)
-      ? (portion as PortionSize)
+  const portionRaw = o.portion;
+  const portion: PortionSize =
+    typeof portionRaw === "string" && VALID_PORTIONS.includes(portionRaw as PortionSize)
+      ? (portionRaw as PortionSize)
       : "medium";
   const detailsRaw = o.details;
   const details =
     typeof detailsRaw === "string" && detailsRaw.trim() !== ""
       ? detailsRaw.trim()
       : undefined;
-  return { meal: meal.trim(), portion: portionSize, details };
+  return { meal: meal.trim(), portion, details };
 }
 
 function parseEstimate(raw: unknown): EstimateResult | null {
@@ -179,13 +178,13 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: "system",
-            content: `You are a nutrition assistant. Estimate macros for the given meal. Respond with a single JSON object only, no markdown or extra text. Schema: ${ESTIMATE_JSON_SCHEMA}. Use confidence "low" for vague descriptions, "medium" for somewhat specific, "high" for very specific. Notes: brief caveats or assumptions. Portion size: when the user specifies portion (small/medium/large), scale your estimates accordingly—treat "medium" as a typical serving, "small" as roughly 0.6–0.75x that, "large" as roughly 1.3–1.5x. Details: when additional details are provided (e.g. sauces, extra cheese, cooking method), incorporate them into the estimate. Return the final scaled values for calories, protein_g, carbs_g, and fat_g.`,
+            content: `You are a nutrition assistant. Estimate macros for the given meal. Respond with a single JSON object only, no markdown or extra text. Schema: ${ESTIMATE_JSON_SCHEMA}. Use confidence "low" for vague descriptions, "medium" for somewhat specific, "high" for very specific. Notes: brief caveats or assumptions. Portion: scale estimates by portion size—medium = typical serving, small ≈ 0.65x, large ≈ 1.35x. When details are provided (e.g. sauces, extra cheese), incorporate them. Return final calories, protein_g, carbs_g, fat_g.`,
           },
           {
             role: "user",
             content: parsed.details
-              ? `Estimate nutrition for this meal. Portion size: ${parsed.portion}. Details: ${parsed.details}. Meal: ${parsed.meal}`
-              : `Estimate nutrition for this meal. Portion size: ${parsed.portion}. Meal: ${parsed.meal}`,
+              ? `Estimate nutrition. Portion: ${parsed.portion}. Details: ${parsed.details}. Meal: ${parsed.meal}`
+              : `Estimate nutrition. Portion: ${parsed.portion}. Meal: ${parsed.meal}`,
           },
         ],
         response_format: { type: "json_object" },

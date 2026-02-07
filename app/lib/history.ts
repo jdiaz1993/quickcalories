@@ -4,7 +4,6 @@ const HISTORY_LIMIT = 20;
 export interface HistoryEntry {
   id: string;
   meal: string;
-  portion: "small" | "medium" | "large";
   result: {
     calories: number;
     protein_g: number;
