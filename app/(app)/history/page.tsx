@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type EstimateRow = {
@@ -15,75 +17,101 @@ type EstimateRow = {
   created_at: string;
 };
 
-const LIMIT = 20;
+const LIMIT = 50;
 
 function formatTime(iso: string) {
   const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function getDateLabel(iso: string): string {
+  const d = new Date(iso);
   const now = new Date();
-  const sameDay =
-    d.getDate() === now.getDate() &&
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear();
-  if (sameDay) {
-    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  }
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (itemDate.getTime() === today.getTime()) return "Today";
+  if (itemDate.getTime() === yesterday.getTime()) return "Yesterday";
   return d.toLocaleDateString([], {
     month: "short",
     day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+    year: "numeric",
   });
+}
+
+function groupByDate(rows: EstimateRow[]): { label: string; rows: EstimateRow[] }[] {
+  const map = new Map<string, EstimateRow[]>();
+  for (const row of rows) {
+    const key = new Date(row.created_at).toLocaleDateString("en-CA");
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(row);
+  }
+  const labels: { label: string; rows: EstimateRow[] }[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = new Date(row.created_at).toLocaleDateString("en-CA");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const groupLabel = getDateLabel(row.created_at);
+    labels.push({ label: groupLabel, rows: map.get(key) ?? [] });
+  }
+  return labels;
+}
+
+function buildRerunUrl(row: EstimateRow): string {
+  const params = new URLSearchParams();
+  params.set("meal", row.meal);
+  params.set("portion", row.portion ?? "medium");
+  if (row.details) params.set("details", row.details);
+  params.set("rerun", "1");
+  return `/?${params.toString()}`;
 }
 
 export default function HistoryPage() {
   const [list, setList] = useState<EstimateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const supabase = createClient();
-
-  async function load() {
-    setLoading(true);
-    const { data, error: e } = await supabase
-      .from("estimates")
-      .select("id, meal, portion, details, calories, protein_g, carbs_g, fat_g, created_at")
-      .order("created_at", { ascending: false })
-      .limit(LIMIT);
-    setLoading(false);
-    if (e) {
-      setList([]);
-      return;
-    }
-    setList(data ?? []);
-  }
+  const router = useRouter();
 
   useEffect(() => {
-    load();
-  }, []);
-
-  async function removeOne(id: string) {
-    setDeletingId(id);
-    const { error: e } = await supabase.from("estimates").delete().eq("id", id);
-    setDeletingId(null);
-    if (!e) setList((prev) => prev.filter((r) => r.id !== id));
-  }
+    async function init() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        router.replace("/login?next=/history");
+        return;
+      }
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("estimates")
+        .select("id, meal, portion, details, calories, protein_g, carbs_g, fat_g, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(LIMIT);
+      setLoading(false);
+      if (error) {
+        setList([]);
+        return;
+      }
+      setList(data ?? []);
+    }
+    void init();
+  }, [router]);
 
   async function clearAll() {
+    if (!confirm("Clear all history? This cannot be undone.")) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return;
     setClearing(true);
-    const { data: all } = await supabase
-      .from("estimates")
-      .select("id")
-      .order("created_at", { ascending: false });
-    const ids = (all ?? []).map((r) => r.id);
-    if (ids.length > 0) {
-      const { error: e } = await supabase.from("estimates").delete().in("id", ids);
-      if (!e) setList([]);
-    } else {
-      setList([]);
-    }
+    await supabase.from("estimates").delete().eq("user_id", user.id);
+    setList([]);
     setClearing(false);
   }
+
+  const grouped = groupByDate(list);
 
   return (
     <div className="flex flex-col gap-6">
@@ -108,52 +136,46 @@ export default function HistoryPage() {
         </p>
       ) : list.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          No estimates yet. Sign in and run estimates to see them here.
+          No estimates yet. Save estimates from the home page to see them here.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {list.map((row) => (
-            <li
-              key={row.id}
-              className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                  {row.meal}
-                </p>
-                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  {row.calories ?? "—"} cal
-                  {(row.protein_g != null || row.carbs_g != null || row.fat_g != null) && (
-                    <> · P {row.protein_g ?? "—"} / C {row.carbs_g ?? "—"} / F {row.fat_g ?? "—"}g</>
-                  )}
-                  {" · "}
-                  {formatTime(row.created_at)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void removeOne(row.id)}
-                disabled={deletingId === row.id}
-                className="shrink-0 rounded p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-                aria-label="Delete"
-              >
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
-            </li>
+        <div className="space-y-6">
+          {grouped.map(({ label, rows }) => (
+            <section key={label}>
+              <h2 className="mb-2 text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+                {label}
+              </h2>
+              <ul className="space-y-2">
+                {rows.map((row) => (
+                  <li
+                    key={row.id}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                        {row.meal}
+                      </p>
+                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                        {row.calories ?? "—"} kcal
+                        {(row.protein_g != null || row.carbs_g != null || row.fat_g != null) && (
+                          <> · P {row.protein_g ?? "—"} / C {row.carbs_g ?? "—"} / F {row.fat_g ?? "—"}g</>
+                        )}
+                        {" · "}
+                        {formatTime(row.created_at)}
+                      </p>
+                    </div>
+                    <Link
+                      href={buildRerunUrl(row)}
+                      className="qc-button shrink-0 px-2.5 py-1.5 text-xs"
+                    >
+                      Re-run
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

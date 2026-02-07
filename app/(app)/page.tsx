@@ -1,7 +1,8 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   getUsageToday,
@@ -9,7 +10,6 @@ import {
   isLimitReached,
   DAILY_LIMIT,
 } from "../lib/usage";
-import { addHistoryEntry, clearHistory, getHistory, type HistoryEntry } from "../lib/history";
 import { GlassCard } from "../components/GlassCard";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { MacroRing } from "../components/MacroRing";
@@ -24,6 +24,15 @@ interface EstimateResult {
   fat_g: number;
   confidence: "low" | "medium" | "high";
   notes: string;
+}
+
+interface HistoryEntry {
+  id: string;
+  meal: string;
+  portion: string;
+  details: string | null;
+  result: EstimateResult;
+  createdAt: string;
 }
 
 function SearchIcon({ className }: { className?: string }) {
@@ -107,7 +116,7 @@ function EstimateButton({
   );
 }
 
-export default function Home() {
+function HomeInner() {
   const [meal, setMeal] = useState("");
   const [portion, setPortion] = useState<PortionSize>("medium");
   const [details, setDetails] = useState("");
@@ -119,12 +128,16 @@ export default function Home() {
   const [usageToday, setUsageToday] = useState(0);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isPro, setIsPro] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const router = useRouter();
   const [deviceId, setDeviceId] = useState("");
   const [whyOpen, setWhyOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const rerunExecuted = useRef(false);
 
   useEffect(() => {
     setUsageToday(getUsageToday());
-    setHistory(getHistory());
     if (typeof window !== "undefined") {
       const existing = window.localStorage.getItem("quickcalories_device_id");
       if (existing) {
@@ -136,12 +149,25 @@ export default function Home() {
         window.localStorage.setItem("quickcalories_device_id", newId);
         setDeviceId(newId);
       }
+      const draft = sessionStorage.getItem("quickcal_draft");
+      if (draft && !searchParams.get("rerun")) {
+        try {
+          const { meal: m, portion: p, details: d } = JSON.parse(draft) as { meal?: string; portion?: string; details?: string };
+          if (m) setMeal(m);
+          if (p && ["small", "medium", "large"].includes(p)) setPortion(p as PortionSize);
+          if (d) setDetails(d);
+        } catch {
+          /* ignore */
+        }
+      }
     }
     async function loadAuth() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
+      setIsLoggedIn(!!user?.id);
       if (!user?.id) {
         setIsPro(false);
+        setHistory([]);
         return;
       }
       const { data } = await supabase
@@ -156,12 +182,79 @@ export default function Home() {
     void loadAuth();
   }, []);
 
+  async function loadHistory() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
+      setHistory([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("estimates")
+      .select("id, meal, portion, details, calories, protein_g, carbs_g, fat_g, confidence, notes, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (error) {
+      setHistory([]);
+      return;
+    }
+    setHistory(
+      (data ?? []).map((r) => ({
+        id: r.id,
+        meal: r.meal,
+        portion: r.portion ?? "medium",
+        details: r.details,
+        result: {
+          calories: r.calories,
+          protein_g: r.protein_g,
+          carbs_g: r.carbs_g,
+          fat_g: r.fat_g,
+          confidence: r.confidence as "low" | "medium" | "high",
+          notes: r.notes ?? "",
+        },
+        createdAt: r.created_at,
+      }))
+    );
+  }
+
+  useEffect(() => {
+    if (isLoggedIn) void loadHistory();
+    else setHistory([]);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && (meal || portion !== "medium" || details)) {
+        sessionStorage.setItem("quickcal_draft", JSON.stringify({ meal, portion, details }));
+      }
+    };
+  }, [meal, portion, details]);
+
+  useEffect(() => {
+    const mealParam = searchParams.get("meal");
+    const rerun = searchParams.get("rerun") === "1";
+    if (mealParam && rerun && !rerunExecuted.current) {
+      rerunExecuted.current = true;
+      const portionParam = (searchParams.get("portion") as PortionSize) ?? "medium";
+      const detailsParam = searchParams.get("details") ?? "";
+      setMeal(mealParam);
+      setPortion(portionParam);
+      setDetails(detailsParam);
+      setResult(null);
+      setSavedToHistory(false);
+      void handleEstimate(mealParam, portionParam, detailsParam);
+    }
+  }, [searchParams]);
+
   const remaining = isPro ? null : Math.max(0, DAILY_LIMIT - usageToday);
   const atLimit = isPro ? false : isLimitReached();
 
-  async function handleEstimate(targetMealParam?: string) {
+  async function handleEstimate(targetMealParam?: string, overridePortion?: string, overrideDetails?: string) {
     const targetMeal = (targetMealParam ?? meal).trim();
     if (!targetMeal || atLimit) return;
+    const usePortion = (overridePortion ?? portion) as PortionSize;
+    const useDetails = overrideDetails ?? details;
     setError(null);
     setResult(null);
     setSavedToHistory(false);
@@ -174,8 +267,8 @@ export default function Home() {
         ...(deviceId && { "x-device-id": deviceId }),
         body: JSON.stringify({
           meal: targetMeal,
-          portion,
-          details: details.trim() || undefined,
+          portion: usePortion,
+          details: (useDetails ?? "").trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -187,14 +280,7 @@ export default function Home() {
       if (!isPro) {
         setUsageToday(incrementUsageToday());
       }
-      const entry: HistoryEntry = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        meal: targetMeal,
-        result: data.result,
-        createdAt: new Date().toISOString(),
-      };
-      setHistory(addHistoryEntry(entry));
-      setSavedToHistory(true);
+      void saveEstimateToSupabase(targetMeal, usePortion, (useDetails ?? "").trim(), data.result);
     } catch {
       setError("Request failed");
     } finally {
@@ -202,15 +288,60 @@ export default function Home() {
     }
   }
 
-  function handleSaveToHistory() {
+  async function saveEstimateToSupabase(
+    mealVal: string,
+    portionVal: string,
+    detailsVal: string,
+    resultVal: EstimateResult,
+  ) {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return;
+    const { error } = await supabase.from("estimates").insert({
+      user_id: user.id,
+      meal: mealVal.trim(),
+      portion: portionVal,
+      details: detailsVal || null,
+      calories: resultVal.calories,
+      protein_g: resultVal.protein_g,
+      carbs_g: resultVal.carbs_g,
+      fat_g: resultVal.fat_g,
+      confidence: resultVal.confidence,
+      notes: resultVal.notes ?? "",
+    });
+    if (!error) {
+      await loadHistory();
+      setSavedToHistory(true);
+    }
+  }
+
+  async function handleSaveToHistory() {
     if (!result || !meal.trim()) return;
-    const entry: HistoryEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    setSaveError(null);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
+      setSaveError("Log in to save history");
+      router.push("/login?next=/");
+      return;
+    }
+    const { error } = await supabase.from("estimates").insert({
+      user_id: user.id,
       meal: meal.trim(),
-      result,
-      createdAt: new Date().toISOString(),
-    };
-    setHistory(addHistoryEntry(entry));
+      portion,
+      details: details.trim() || null,
+      calories: result.calories,
+      protein_g: result.protein_g,
+      carbs_g: result.carbs_g,
+      fat_g: result.fat_g,
+      confidence: result.confidence,
+      notes: result.notes ?? "",
+    });
+    if (error) {
+      setSaveError(error.message);
+      return;
+    }
+    await loadHistory();
     setSavedToHistory(true);
   }
 
@@ -224,6 +355,8 @@ export default function Home() {
 
   function handleRerun(entry: HistoryEntry) {
     setMeal(entry.meal);
+    setPortion((entry.portion ?? "medium") as PortionSize);
+    setDetails(entry.details ?? "");
     setResult(null);
     setSavedToHistory(false);
     void handleEstimate(entry.meal);
@@ -236,8 +369,13 @@ export default function Home() {
     }
   }
 
-  function handleClearHistory() {
-    clearHistory();
+  async function handleClearHistory() {
+    if (!isLoggedIn) return;
+    if (!confirm("Clear all history?")) return;
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return;
+    await supabase.from("estimates").delete().eq("user_id", user.id);
     setHistory([]);
   }
 
@@ -248,8 +386,8 @@ export default function Home() {
   };
 
   return (
-    <div className="qc-bg page-noise relative min-h-full min-h-[60vh] overflow-hidden rounded-none">
-      <div className="relative z-10 grid grid-cols-1 items-start gap-8 transition-all duration-300 lg:grid-cols-[1fr_1fr]">
+    <div className="qc-bg page-noise relative min-h-screen overflow-hidden rounded-none">
+      <div className="relative z-10 grid w-full grid-cols-1 items-stretch gap-8 transition-all duration-300 lg:grid-cols-2">
         {/* Left column: app card (meal input + portion + details + estimate) */}
         <div className="flex w-full flex-col gap-8 lg:gap-4">
           {/* Hero header */}
@@ -461,7 +599,7 @@ export default function Home() {
                 disabled={savedToHistory}
                 className="qc-button w-auto px-4 py-2.5 text-sm"
               >
-                {savedToHistory ? "Saved" : "Save"}
+                {savedToHistory ? "Saved" : isLoggedIn ? "Save to history" : "Log in to save history"}
               </button>
               <button
                 type="button"
@@ -471,12 +609,17 @@ export default function Home() {
                 Copy
               </button>
             </div>
+            {saveError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+                {saveError}
+              </p>
+            )}
           </GlassCard>
           )}
 
           {/* Placeholder when no result yet (desktop) — avoids empty right column */}
           {!loading && result === null && !error && (
-            <GlassCard className="hidden w-full justify-center p-8 lg:flex lg:min-h-[320px] lg:flex-col" aria-hidden>
+            <GlassCard className="hidden w-full min-h-[260px] flex-col justify-center p-8 lg:flex lg:min-h-[320px]" aria-hidden>
               <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
                 Enter a meal above and tap Estimate to see calories and macros here.
               </p>
@@ -540,9 +683,6 @@ export default function Home() {
           </GlassCard>
           )}
         </div>
-
-        {/* Spacer for sticky bar on mobile */}
-        <div className="h-20 sm:hidden" aria-hidden />
       </div>
 
       {/* Sticky action bar — mobile only */}
@@ -554,5 +694,13 @@ export default function Home() {
         />
       </StickyActionBar>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeInner />
+    </Suspense>
   );
 }

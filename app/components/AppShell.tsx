@@ -68,7 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col">
       {/* Minimal top bar: logo left, Account/Login right */}
       <header className="sticky top-0 z-20 flex min-h-[52px] items-center border-b border-zinc-200/60 bg-white/95 backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-950/95">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">
           <Link
             href="/"
             className="flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50"
@@ -118,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         className="hidden border-b border-zinc-200/60 bg-white/80 dark:border-zinc-800/60 dark:bg-zinc-950/80 sm:block"
         aria-label="Main navigation"
       >
-        <div className="mx-auto flex w-full max-w-7xl justify-center px-4 py-3 sm:px-6 lg:px-10">
+        <div className="mx-auto flex w-full max-w-[1400px] justify-center px-4 py-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">
           <div className="relative flex w-full max-w-[280px] rounded-full bg-zinc-200/80 p-1 dark:bg-zinc-800/60">
             {/* Sliding active pill */}
             <div
@@ -153,8 +153,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* Main content */}
-      <main className="min-h-[60vh] flex-1 bg-gradient-to-b from-zinc-50 via-white to-emerald-50/30 py-6 pb-28 dark:from-zinc-950 dark:via-zinc-950 dark:to-emerald-950/20 sm:pb-10 lg:py-10">
-        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-10">{children}</div>
+      <main className="min-h-[calc(100vh-140px)] flex-1 bg-gradient-to-b from-zinc-50 via-white to-emerald-50/30 py-6 pb-24 dark:from-zinc-950 dark:via-zinc-950 dark:to-emerald-950/20 sm:pb-10 lg:py-10 lg:pb-14">
+        <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">{children}</div>
       </main>
 
       {/* Mobile: bottom tab bar (Estimate / History / Account) */}
@@ -162,7 +162,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-center border-t border-zinc-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/95 sm:hidden"
         aria-label="Main navigation"
       >
-        <div className="mx-auto flex w-full max-w-7xl justify-around px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto flex w-full max-w-[1400px] justify-around px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">
           {tabs.map(({ href, label, icon: Icon }) => {
             const active =
               pathname === href || (href !== "/" && pathname.startsWith(href));
