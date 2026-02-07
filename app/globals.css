@@ -3,11 +3,20 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* QuickCalories design system */
+  --qc-accent: #f97316;
+  --qc-accent-2: #fb923c;
+  --qc-surface: #ffffff;
+  --qc-surface-dark: #18181b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-qc-accent: var(--qc-accent);
+  --color-qc-accent-2: var(--qc-accent-2);
+  --color-qc-surface: var(--qc-surface);
+  --color-qc-surface-dark: var(--qc-surface-dark);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -23,4 +32,149 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Subtle noise overlay for premium pages */
+.page-noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .page-noise::before {
+  opacity: 0.05;
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide-in {
+  animation: fade-slide-in 0.3s ease-out forwards;
+}
+
+/* QuickCalories design system utilities */
+
+/* Gradient background + blurred blob accents */
+.qc-bg {
+  position: relative;
+  background: linear-gradient(
+    to bottom,
+    var(--qc-surface) 0%,
+    color-mix(in srgb, var(--qc-accent) 12%, var(--qc-surface)) 40%,
+    color-mix(in srgb, var(--qc-accent-2) 10%, var(--qc-surface)) 100%
+  );
+}
+
+.dark .qc-bg {
+  background: linear-gradient(
+    to bottom,
+    var(--qc-surface-dark) 0%,
+    color-mix(in srgb, var(--qc-accent) 8%, var(--qc-surface-dark)) 50%,
+    color-mix(in srgb, var(--qc-accent-2) 6%, var(--qc-surface-dark)) 100%
+  );
+}
+
+.qc-bg::before {
+  content: "";
+  position: absolute;
+  left: -8rem;
+  top: -8rem;
+  width: 16rem;
+  height: 16rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--qc-accent) 35%, transparent);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .qc-bg::before {
+  background: color-mix(in srgb, var(--qc-accent) 18%, transparent);
+}
+
+.qc-bg::after {
+  content: "";
+  position: absolute;
+  right: -6rem;
+  bottom: -6rem;
+  width: 18rem;
+  height: 18rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--qc-accent-2) 25%, transparent);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .qc-bg::after {
+  background: color-mix(in srgb, var(--qc-accent-2) 12%, transparent);
+}
+
+/* Glass card */
+.qc-glass {
+  background: color-mix(in srgb, var(--qc-surface) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.06);
+  backdrop-filter: blur(24px);
+}
+
+.dark .qc-glass {
+  background: color-mix(in srgb, var(--qc-surface-dark) 60%, transparent);
+  border-color: color-mix(in srgb, var(--background) 30%, transparent);
+  box-shadow: none;
+}
+
+/* Primary gradient button */
+.qc-button {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 1rem;
+  background: linear-gradient(to bottom, var(--qc-accent), var(--qc-accent-2));
+  padding: 1rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--qc-accent) 25%, transparent);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.qc-button:hover:not(:disabled) {
+  filter: brightness(1.05);
+  box-shadow: 0 10px 20px -3px color-mix(in srgb, var(--qc-accent) 35%, transparent);
+}
+
+.qc-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.qc-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dark .qc-button {
+  box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--qc-accent) 20%, transparent);
+}
+
+.dark .qc-button:hover:not(:disabled) {
+  box-shadow: 0 10px 20px -3px color-mix(in srgb, var(--qc-accent) 30%, transparent);
 }

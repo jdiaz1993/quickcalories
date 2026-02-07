@@ -43,28 +43,30 @@ export default async function AccountPage() {
       : null;
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        Account
-      </h1>
+    <div className="qc-bg page-noise relative min-h-[60vh] overflow-hidden rounded-none">
+      <div className="relative z-10 flex flex-col gap-6">
+        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          Account
+        </h1>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-        <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-          Plan
-        </h2>
-        <p className="mt-1 text-lg font-medium text-zinc-900 dark:text-zinc-50">
-          {plan}
-        </p>
-        {nextBilling && (
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Next billing date: {nextBilling}
+        <section className="qc-glass p-5">
+          <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            Plan
+          </h2>
+          <p className="mt-1 text-lg font-medium text-zinc-900 dark:text-zinc-50">
+            {plan}
           </p>
-        )}
-      </section>
+          {nextBilling && (
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Next billing date: {nextBilling}
+            </p>
+          )}
+        </section>
 
-      <div className="flex flex-col gap-4">
-        <ManageSubscriptionButton stripeCustomerId={stripeCustomerId} />
-        <SignOutButton />
+        <div className="flex flex-col gap-4">
+          <ManageSubscriptionButton stripeCustomerId={stripeCustomerId} />
+          <SignOutButton />
+        </div>
       </div>
     </div>
   );
