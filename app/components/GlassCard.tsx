@@ -7,5 +7,11 @@ export function GlassCard({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={`qc-glass ${className}`}>{children}</div>;
+  return (
+    <div
+      className={`rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900 ${className}`}
+    >
+      {children}
+    </div>
+  );
 }

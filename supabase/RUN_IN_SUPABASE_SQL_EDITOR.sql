@@ -4,11 +4,15 @@
 -- 1. PROFILES
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
-  stripe_customer_id text
+  stripe_customer_id text,
+  daily_goal int default 2000
 );
 alter table public.profiles enable row level security;
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles for select using (auth.uid() = user_id);
+drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own" on public.profiles for insert with check (auth.uid() = user_id);
+drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own" on public.profiles for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- 2. SUBSCRIPTIONS
@@ -21,6 +25,7 @@ create table if not exists public.subscriptions (
 );
 create index if not exists subscriptions_user_id_idx on public.subscriptions (user_id);
 alter table public.subscriptions enable row level security;
+drop policy if exists "subscriptions_select_own" on public.subscriptions;
 create policy "subscriptions_select_own" on public.subscriptions for select using (auth.uid() = user_id);
 
 -- 3. ESTIMATES (full schema for history)
@@ -41,9 +46,13 @@ create table public.estimates (
 );
 create index estimates_user_id_created_at_idx on public.estimates (user_id, created_at desc);
 alter table public.estimates enable row level security;
+drop policy if exists "estimates_select_own" on public.estimates;
 create policy "estimates_select_own" on public.estimates for select using (auth.uid() = user_id);
+drop policy if exists "estimates_insert_own" on public.estimates;
 create policy "estimates_insert_own" on public.estimates for insert with check (auth.uid() = user_id);
+drop policy if exists "estimates_update_own" on public.estimates;
 create policy "estimates_update_own" on public.estimates for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "estimates_delete_own" on public.estimates;
 create policy "estimates_delete_own" on public.estimates for delete using (auth.uid() = user_id);
 
 -- 4. Auto-create profile on signup

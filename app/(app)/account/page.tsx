@@ -43,13 +43,13 @@ export default async function AccountPage() {
       : null;
 
   return (
-    <div className="qc-bg page-noise relative min-h-[60vh] overflow-hidden rounded-none">
-      <div className="relative z-10 flex flex-col gap-6">
+    <div className="min-h-[60vh] bg-zinc-50 dark:bg-zinc-950">
+      <div className="flex flex-col gap-6">
         <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           Account
         </h1>
 
-        <section className="qc-glass p-5">
+        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
           <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
             Plan
           </h2>

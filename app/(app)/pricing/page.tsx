@@ -51,8 +51,8 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="qc-bg page-noise relative min-h-[60vh] overflow-hidden rounded-none">
-      <div className="relative z-10 flex flex-col gap-6">
+    <div className="min-h-[60vh] bg-zinc-50 dark:bg-zinc-950">
+      <div className="flex flex-col gap-6">
         <header>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
             Pricing
@@ -67,7 +67,7 @@ export default function PricingPage() {
               </p>
               <Link
                 href="/account"
-                className="rounded-xl border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                className="rounded-xl border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-900 transition-colors hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
               >
                 Manage subscription
               </Link>
@@ -76,7 +76,7 @@ export default function PricingPage() {
         </header>
 
         <div className="flex flex-col gap-4 sm:gap-6">
-          <section className="qc-glass p-5 sm:p-6">
+          <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 sm:p-6">
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               Free
             </h2>
@@ -94,13 +94,13 @@ export default function PricingPage() {
             </ul>
             <Link
               href="/"
-              className="mt-5 block w-full rounded-xl border border-zinc-300 bg-transparent px-4 py-3 text-center text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-50 dark:hover:bg-zinc-800"
+              className="mt-5 block w-full rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-3 text-center text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
             >
               Get started
             </Link>
           </section>
 
-          <section className="qc-glass border-2 border-zinc-900 p-5 dark:border-zinc-100 sm:p-6">
+          <section className="rounded-xl border-2 border-zinc-900 bg-white p-5 shadow-sm dark:border-zinc-100 dark:bg-zinc-900 sm:p-6">
             <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               Best value
             </p>
@@ -118,15 +118,15 @@ export default function PricingPage() {
             </p>
             <ul className="mt-4 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
               <li className="flex items-center gap-2">
-                <span className="text-zinc-500 dark:text-zinc-500">•</span>
+                <span className="text-zinc-500 dark:text-zinc-400">•</span>
                 Unlimited estimates
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-zinc-500 dark:text-zinc-500">•</span>
+                <span className="text-zinc-500 dark:text-zinc-400">•</span>
                 Estimate history
               </li>
               <li className="flex items-center gap-2">
-                <span className="text-zinc-500 dark:text-zinc-500">•</span>
+                <span className="text-zinc-500 dark:text-zinc-400">•</span>
                 Faster results
               </li>
             </ul>

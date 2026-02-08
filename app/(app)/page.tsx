@@ -135,6 +135,17 @@ function HomeInner() {
   const [whyOpen, setWhyOpen] = useState(false);
   const searchParams = useSearchParams();
   const rerunExecuted = useRef(false);
+  const [dailyGoal, setDailyGoal] = useState(2000);
+  const [dailyProteinGoal, setDailyProteinGoal] = useState(150);
+  const [dailyCarbsGoal, setDailyCarbsGoal] = useState(200);
+  const [dailyFatGoal, setDailyFatGoal] = useState(70);
+  const [goalEditOpen, setGoalEditOpen] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
+  const [goalProteinInput, setGoalProteinInput] = useState("");
+  const [goalCarbsInput, setGoalCarbsInput] = useState("");
+  const [goalFatInput, setGoalFatInput] = useState("");
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [goalError, setGoalError] = useState("");
 
   useEffect(() => {
     setUsageToday(getUsageToday());
@@ -168,59 +179,109 @@ function HomeInner() {
       if (!user?.id) {
         setIsPro(false);
         setHistory([]);
+        if (typeof window !== "undefined") {
+          const stored = window.localStorage.getItem("quickcalories_daily_goal");
+          setDailyGoal(stored ? Math.max(1, parseInt(stored, 10) || 2000) : 2000);
+          const p = window.localStorage.getItem("quickcalories_daily_protein_goal");
+          setDailyProteinGoal(p ? Math.max(0, parseInt(p, 10) || 150) : 150);
+          const c = window.localStorage.getItem("quickcalories_daily_carbs_goal");
+          setDailyCarbsGoal(c ? Math.max(0, parseInt(c, 10) || 200) : 200);
+          const f = window.localStorage.getItem("quickcalories_daily_fat_goal");
+          setDailyFatGoal(f ? Math.max(0, parseInt(f, 10) || 70) : 70);
+        }
         return;
       }
-      const { data } = await supabase
-        .from("subscriptions")
-        .select("id")
-        .eq("user_id", user.id)
-        .in("status", ["active", "trialing"])
-        .limit(1)
-        .maybeSingle();
-      setIsPro(!!data);
+      const [subsRes, profileRes] = await Promise.all([
+        supabase.from("subscriptions").select("id").eq("user_id", user.id).in("status", ["active", "trialing"]).limit(1).maybeSingle(),
+        supabase.from("profiles").select("daily_goal, daily_protein_goal, daily_carbs_goal, daily_fat_goal").eq("user_id", user.id).maybeSingle(),
+      ]);
+      setIsPro(!!subsRes.data);
+      const p = profileRes.data;
+      setDailyGoal(p?.daily_goal != null && p.daily_goal > 0 ? p.daily_goal : 2000);
+      setDailyProteinGoal(p?.daily_protein_goal != null && p.daily_protein_goal >= 0 ? p.daily_protein_goal : 150);
+      setDailyCarbsGoal(p?.daily_carbs_goal != null && p.daily_carbs_goal >= 0 ? p.daily_carbs_goal : 200);
+      setDailyFatGoal(p?.daily_fat_goal != null && p.daily_fat_goal >= 0 ? p.daily_fat_goal : 70);
     }
     void loadAuth();
   }, []);
 
-  async function loadHistory() {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.id) {
-      setHistory([]);
-      return;
-    }
-    const { data, error } = await supabase
-      .from("estimates")
-      .select("id, meal, portion, details, calories, protein_g, carbs_g, fat_g, confidence, notes, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(10);
-    if (error) {
-      setHistory([]);
-      return;
-    }
-    setHistory(
-      (data ?? []).map((r) => ({
-        id: r.id,
-        meal: r.meal,
-        portion: r.portion ?? "medium",
-        details: r.details,
-        result: {
-          calories: r.calories,
-          protein_g: r.protein_g,
-          carbs_g: r.carbs_g,
-          fat_g: r.fat_g,
-          confidence: r.confidence as "low" | "medium" | "high",
-          notes: r.notes ?? "",
-        },
-        createdAt: r.created_at,
-      }))
+  function isTodayLocal(iso: string): boolean {
+    const d = new Date(iso);
+    const now = new Date();
+    return (
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear()
     );
   }
 
+  async function loadToday() {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const { data, error } = await supabase
+        .from("estimates")
+        .select("id, meal, portion, details, calories, protein_g, carbs_g, fat_g, confidence, notes, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) {
+        setHistory([]);
+        return;
+      }
+      const all = data ?? [];
+      const todayRows = all.filter((r) => isTodayLocal(r.created_at));
+      setHistory(
+        todayRows.map((r) => ({
+          id: r.id,
+          meal: r.meal,
+          portion: r.portion ?? "medium",
+          details: r.details,
+          result: {
+            calories: r.calories,
+            protein_g: r.protein_g,
+            carbs_g: r.carbs_g,
+            fat_g: r.fat_g,
+            confidence: r.confidence as "low" | "medium" | "high",
+            notes: r.notes ?? "",
+          },
+          createdAt: r.created_at,
+        }))
+      );
+      return;
+    }
+    if (typeof window === "undefined") {
+      setHistory([]);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem("quickcal_local_estimates");
+      const arr = raw ? (JSON.parse(raw) as { id: string; meal: string; result: { calories: number }; createdAt: string }[]) : [];
+      const todayEntries = arr.filter((e) => isTodayLocal(e.createdAt));
+      setHistory(
+        todayEntries.map((e) => ({
+          id: e.id,
+          meal: e.meal,
+          portion: "medium" as const,
+          details: null as string | null,
+          result: {
+            calories: e.result.calories,
+            protein_g: 0,
+            carbs_g: 0,
+            fat_g: 0,
+            confidence: "medium" as const,
+            notes: "",
+          },
+          createdAt: e.createdAt,
+        }))
+      );
+    } catch {
+      setHistory([]);
+    }
+  }
+
   useEffect(() => {
-    if (isLoggedIn) void loadHistory();
-    else setHistory([]);
+    void loadToday();
   }, [isLoggedIn]);
 
   useEffect(() => {
@@ -247,8 +308,21 @@ function HomeInner() {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!goalEditOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancelGoalEdit();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [goalEditOpen]);
+
   const remaining = isPro ? null : Math.max(0, DAILY_LIMIT - usageToday);
   const atLimit = isPro ? false : isLimitReached();
+  const todayTotal = history.reduce((sum, e) => sum + (e.result?.calories ?? 0), 0);
+  const todayProtein = history.reduce((sum, e) => sum + (e.result?.protein_g ?? 0), 0);
+  const todayCarbs = history.reduce((sum, e) => sum + (e.result?.carbs_g ?? 0), 0);
+  const todayFat = history.reduce((sum, e) => sum + (e.result?.fat_g ?? 0), 0);
 
   async function handleEstimate(targetMealParam?: string, overridePortion?: string, overrideDetails?: string) {
     const targetMeal = (targetMealParam ?? meal).trim();
@@ -280,7 +354,24 @@ function HomeInner() {
       if (!isPro) {
         setUsageToday(incrementUsageToday());
       }
-      void saveEstimateToSupabase(targetMeal, usePortion, (useDetails ?? "").trim(), data.result);
+      if (isLoggedIn) {
+        void saveEstimateToSupabase(targetMeal, usePortion, (useDetails ?? "").trim(), data.result);
+      } else if (typeof window !== "undefined") {
+        try {
+          const raw = window.localStorage.getItem("quickcal_local_estimates");
+          const arr = raw ? JSON.parse(raw) : [];
+          arr.push({
+            id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            meal: targetMeal,
+            result: { calories: data.result.calories },
+            createdAt: new Date().toISOString(),
+          });
+          window.localStorage.setItem("quickcal_local_estimates", JSON.stringify(arr));
+          void loadToday();
+        } catch {
+          /* ignore */
+        }
+      }
     } catch {
       setError("Request failed");
     } finally {
@@ -314,7 +405,7 @@ function HomeInner() {
       setSaveError(`Couldn't save to history: ${error.message}`);
       return;
     }
-    await loadHistory();
+    await loadToday();
     setSavedToHistory(true);
   }
 
@@ -344,7 +435,7 @@ function HomeInner() {
       setSaveError(error.message);
       return;
     }
-    await loadHistory();
+    await loadToday();
     setSavedToHistory(true);
   }
 
@@ -382,6 +473,84 @@ function HomeInner() {
     setHistory([]);
   }
 
+  const GOAL_CAL_MIN = 500;
+  const GOAL_CAL_MAX = 8000;
+  const GOAL_PROTEIN_MAX = 500;
+  const GOAL_CARBS_MAX = 600;
+  const GOAL_FAT_MAX = 300;
+
+  function openGoalEdit() {
+    setGoalInput(String(dailyGoal));
+    setGoalProteinInput(String(dailyProteinGoal));
+    setGoalCarbsInput(String(dailyCarbsGoal));
+    setGoalFatInput(String(dailyFatGoal));
+    setGoalError("");
+    setGoalEditOpen(true);
+  }
+
+  function parseGoal(raw: string, min: number, max: number, name: string): number | null {
+    const s = raw.trim();
+    if (s === "") return null;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < min || n > max) return null;
+    return Math.round(n);
+  }
+
+  async function saveGoal() {
+    const cal = parseGoal(goalInput, GOAL_CAL_MIN, GOAL_CAL_MAX, "Calories");
+    if (cal === null) {
+      setGoalError("Calories: enter a number between " + GOAL_CAL_MIN + " and " + GOAL_CAL_MAX);
+      return;
+    }
+    const protein = parseGoal(goalProteinInput, 0, GOAL_PROTEIN_MAX, "Protein");
+    if (protein === null) {
+      setGoalError("Protein: enter 0–" + GOAL_PROTEIN_MAX + " g");
+      return;
+    }
+    const carbs = parseGoal(goalCarbsInput, 0, GOAL_CARBS_MAX, "Carbs");
+    if (carbs === null) {
+      setGoalError("Carbs: enter 0–" + GOAL_CARBS_MAX + " g");
+      return;
+    }
+    const fat = parseGoal(goalFatInput, 0, GOAL_FAT_MAX, "Fat");
+    if (fat === null) {
+      setGoalError("Fat: enter 0–" + GOAL_FAT_MAX + " g");
+      return;
+    }
+    setGoalError("");
+    setGoalSaving(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const { error } = await supabase.from("profiles").upsert(
+        { user_id: user.id, daily_goal: cal, daily_protein_goal: protein, daily_carbs_goal: carbs, daily_fat_goal: fat },
+        { onConflict: "user_id" }
+      );
+      if (error) {
+        setGoalError(error.message || "Failed to save. Try again.");
+        setGoalSaving(false);
+        return;
+      }
+    } else if (typeof window !== "undefined") {
+      window.localStorage.setItem("quickcalories_daily_goal", String(cal));
+      window.localStorage.setItem("quickcalories_daily_protein_goal", String(protein));
+      window.localStorage.setItem("quickcalories_daily_carbs_goal", String(carbs));
+      window.localStorage.setItem("quickcalories_daily_fat_goal", String(fat));
+    }
+    setDailyGoal(cal);
+    setDailyProteinGoal(protein);
+    setDailyCarbsGoal(carbs);
+    setDailyFatGoal(fat);
+    setGoalEditOpen(false);
+    setGoalSaving(false);
+  }
+
+  function cancelGoalEdit() {
+    if (goalSaving) return;
+    setGoalError("");
+    setGoalEditOpen(false);
+  }
+
   const confidenceConfig = {
     low: { label: "Low confidence", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200" },
     medium: { label: "Medium confidence", className: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200" },
@@ -389,8 +558,8 @@ function HomeInner() {
   };
 
   return (
-    <div className="qc-bg page-noise relative min-h-screen overflow-hidden rounded-none">
-      <div className="relative z-10 grid w-full grid-cols-1 items-stretch gap-8 transition-all duration-300 lg:grid-cols-2">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      <div className="grid w-full grid-cols-1 items-stretch gap-8 transition-all duration-300 lg:grid-cols-2">
         {/* Left column: app card (meal input + portion + details + estimate) */}
         <div className="flex w-full flex-col gap-8 lg:gap-4">
           {/* Hero header */}
@@ -408,8 +577,8 @@ function HomeInner() {
             <UpgradedBanner />
           </Suspense>
 
-          {/* Input area — glass card: horizontal layout on desktop */}
-          <GlassCard className="w-full p-5 transition-all duration-300 sm:p-6 lg:p-5 lg:rounded-3xl">
+          {/* Input area */}
+          <GlassCard className="w-full p-5 sm:p-6 lg:p-5">
             <div className="space-y-5 lg:space-y-4">
               {/* Meal input: full width */}
               <div className="space-y-2">
@@ -424,7 +593,7 @@ function HomeInner() {
                     value={meal}
                     onChange={(e) => setMeal(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleEstimate()}
-                    className="w-full rounded-2xl border border-zinc-200/80 bg-white/80 py-3.5 pl-12 pr-4 text-base text-zinc-900 placeholder-zinc-400 outline-none transition-all focus:border-[var(--qc-accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--qc-accent)_20%,transparent)] dark:border-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-50 dark:placeholder-zinc-500 dark:focus:border-[var(--qc-accent)] dark:focus:ring-[color-mix(in_srgb,var(--qc-accent)_25%,transparent)]"
+                    className="w-full rounded-2xl border border-zinc-200 bg-white py-3.5 pl-12 pr-4 text-base text-zinc-900 placeholder-zinc-500 outline-none transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder-zinc-400 dark:focus:border-orange-500 dark:focus:ring-orange-500/30"
                     aria-label="Meal description"
                   />
                 </div>
@@ -443,7 +612,7 @@ function HomeInner() {
                 />
 
                 {/* Details accordion */}
-                <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200/60 bg-zinc-50/50 dark:border-zinc-600/50 dark:bg-zinc-800/30 lg:min-h-[52px]">
+                <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 lg:min-h-[52px]">
                   <button
                     type="button"
                     onClick={() => setDetailsOpen((o) => !o)}
@@ -464,7 +633,7 @@ function HomeInner() {
                     style={{ gridTemplateRows: detailsOpen ? "1fr" : "0fr" }}
                   >
                     <div className="overflow-hidden">
-                      <div className="border-t border-zinc-200/60 dark:border-zinc-600/50">
+                      <div className="border-t border-zinc-200 dark:border-zinc-700">
                         <textarea
                           id="details"
                           rows={3}
@@ -484,7 +653,7 @@ function HomeInner() {
           {/* Free estimates pill */}
           {!isPro && (
             <p className="text-center text-sm text-zinc-600 dark:text-zinc-400 lg:text-left">
-              <span className="rounded-full bg-white/80 px-3 py-1 font-medium text-orange-700 shadow-sm dark:bg-zinc-800/80 dark:text-orange-300">
+              <span className="rounded-full bg-white px-3 py-1 font-medium text-orange-700 shadow-sm dark:bg-zinc-800 dark:text-orange-300">
                 {remaining ?? 0} free
               </span>{" "}
               estimate{remaining === 1 ? "" : "s"} left today
@@ -560,7 +729,7 @@ function HomeInner() {
             </div>
 
             {/* Why this estimate? — collapsible */}
-            <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-600/50">
+            <div className="mt-6 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
               <button
                 type="button"
                 onClick={() => setWhyOpen((o) => !o)}
@@ -581,11 +750,11 @@ function HomeInner() {
                 style={{ gridTemplateRows: whyOpen ? "1fr" : "0fr" }}
               >
                 <div className="overflow-hidden">
-                  <div className="border-t border-zinc-100 px-4 py-3 dark:border-zinc-700">
+                  <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-700">
                     {result.notes ? (
                       <p className="text-xs text-zinc-600 dark:text-zinc-400">{result.notes}</p>
                     ) : (
-                      <p className="text-xs text-zinc-500 dark:text-zinc-500">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
                         Estimate is based on typical portions and common ingredients.
                       </p>
                     )}
@@ -607,7 +776,7 @@ function HomeInner() {
               <button
                 type="button"
                 onClick={handleCopyResult}
-                className="rounded-xl border border-zinc-200 bg-white/80 px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 active:scale-[0.98] dark:border-zinc-600 dark:bg-zinc-800/80 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                className="rounded-xl border border-zinc-200 bg-zinc-100 px-4 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-200 active:scale-[0.98] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
               >
                 Copy
               </button>
@@ -629,64 +798,222 @@ function HomeInner() {
             </GlassCard>
           )}
 
-          {/* History */}
-          {history.length > 0 && (
-          <GlassCard className="w-full p-5 transition-all duration-300">
-            <div className="mb-4 flex items-center justify-between border-b border-zinc-200/80 pb-3 dark:border-zinc-600/50">
-              <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                History
+          {/* Daily goal */}
+          <GlassCard className="w-full p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                Daily goal
               </h2>
               <button
                 type="button"
-                onClick={handleClearHistory}
-                className="rounded-lg px-2.5 py-1 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-700 dark:hover:text-zinc-100"
+                onClick={openGoalEdit}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors"
               >
-                Clear
+                Edit goal
               </button>
             </div>
-            <ul className="space-y-3 text-sm">
-              {history.map((entry) => {
-                const time = new Date(entry.createdAt).toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                });
-                return (
-                  <li
-                    key={entry.id}
-                    className="flex items-start justify-between gap-3 rounded-xl border border-zinc-200/60 py-2.5 pl-3 pr-2 dark:border-zinc-600/50"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-zinc-900 dark:text-zinc-50">
-                        {entry.meal}
-                      </p>
-                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                        {entry.result.calories} kcal · {time}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleCopy(entry)}
-                        className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-50 active:scale-[0.98] dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                      >
-                        Copy
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRerun(entry)}
-                        className="qc-button w-auto px-2.5 py-1.5 text-xs"
-                      >
-                        Re-run
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="mt-2 flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">{todayTotal.toLocaleString()}</span>
+              <span className="text-zinc-500 dark:text-zinc-400">/</span>
+              <span className="text-xl font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">{dailyGoal.toLocaleString()} kcal</span>
+            </div>
+            <div className="mt-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-500 dark:bg-emerald-500/90 transition-all duration-300"
+                style={{ width: `${dailyGoal > 0 ? Math.min(100, (todayTotal / dailyGoal) * 100) : 0}%` }}
+              />
+            </div>
+            <div className="mt-4 space-y-3">
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">{todayProtein}</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">/</span>
+                  <span className="text-xl font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">{dailyProteinGoal} g protein</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 dark:bg-emerald-500/90 transition-all duration-300"
+                    style={{ width: `${dailyProteinGoal > 0 ? Math.min(100, (todayProtein / dailyProteinGoal) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">{todayCarbs}</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">/</span>
+                  <span className="text-xl font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">{dailyCarbsGoal} g carbs</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500 dark:bg-amber-500/90 transition-all duration-300"
+                    style={{ width: `${dailyCarbsGoal > 0 ? Math.min(100, (todayCarbs / dailyCarbsGoal) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">{todayFat}</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">/</span>
+                  <span className="text-xl font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">{dailyFatGoal} g fat</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-rose-500 dark:bg-rose-500/90 transition-all duration-300"
+                    style={{ width: `${dailyFatGoal > 0 ? Math.min(100, (todayFat / dailyFatGoal) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
           </GlassCard>
-          )}
+
+          {/* Today */}
+          <GlassCard className="w-full p-5">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Today
+            </h2>
+            {history.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+                No meals saved today yet.
+              </p>
+            ) : (
+              <>
+                <p className="mt-2 text-2xl font-bold tabular-nums text-zinc-900 dark:text-zinc-50">
+                  {todayTotal.toLocaleString()} kcal
+                </p>
+                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  total today
+                </p>
+                <ul className="mt-4 space-y-2">
+                  {history.map((entry) => {
+                    const time = new Date(entry.createdAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    });
+                    return (
+                      <li
+                        key={entry.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 py-2.5 pl-3 pr-3 dark:border-zinc-700"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                            {entry.meal}
+                          </p>
+                          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                            {time}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                          {entry.result.calories} kcal
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <Link
+                  href="/history"
+                  className="mt-3 inline-block text-sm font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+                >
+                  View full history →
+                </Link>
+              </>
+            )}
+          </GlassCard>
         </div>
       </div>
+
+      {/* Edit goal modal */}
+      {goalEditOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={(e) => { if (e.target === e.currentTarget) cancelGoalEdit(); }}
+        >
+          <GlassCard className="w-full max-w-sm p-5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-xl">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Edit daily goals</h3>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Calories (kcal) and macros (g).</p>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label htmlFor="goal-cal" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Calories (kcal)</label>
+                <input
+                  id="goal-cal"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={10}
+                  value={goalInput}
+                  onChange={(e) => { setGoalInput(e.target.value); if (goalError) setGoalError(""); }}
+                  className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="2000"
+                />
+              </div>
+              <div>
+                <label htmlFor="goal-protein" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Protein (g)</label>
+                <input
+                  id="goal-protein"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={5}
+                  value={goalProteinInput}
+                  onChange={(e) => { setGoalProteinInput(e.target.value); if (goalError) setGoalError(""); }}
+                  className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="150"
+                />
+              </div>
+              <div>
+                <label htmlFor="goal-carbs" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Carbs (g)</label>
+                <input
+                  id="goal-carbs"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={5}
+                  value={goalCarbsInput}
+                  onChange={(e) => { setGoalCarbsInput(e.target.value); if (goalError) setGoalError(""); }}
+                  className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="200"
+                />
+              </div>
+              <div>
+                <label htmlFor="goal-fat" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">Fat (g)</label>
+                <input
+                  id="goal-fat"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={5}
+                  value={goalFatInput}
+                  onChange={(e) => { setGoalFatInput(e.target.value); if (goalError) setGoalError(""); }}
+                  className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                  placeholder="70"
+                />
+              </div>
+            </div>
+            {goalError && (
+              <p id="goal-error" className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+                {goalError}
+              </p>
+            )}
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={cancelGoalEdit}
+                disabled={goalSaving}
+                className="rounded-xl border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 dark:border-zinc-600 dark:text-zinc-300 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveGoal()}
+                disabled={goalSaving}
+                className="rounded-xl bg-orange-600 px-3 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
+              >
+                {goalSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
 
       {/* Sticky action bar — mobile only */}
       <StickyActionBar>

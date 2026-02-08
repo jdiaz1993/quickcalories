@@ -68,7 +68,7 @@ export default function SuccessPage() {
           </p>
           <Link
             href="/pricing"
-            className="mt-6 inline-block w-full rounded-xl bg-zinc-900 px-4 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="mt-6 inline-block w-full rounded-xl bg-orange-500 px-4 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-orange-600"
           >
             Back to pricing
           </Link>

@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { HistoryClient } from "./HistoryClient";
 
@@ -9,17 +8,19 @@ export default async function HistoryPage() {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user?.id) {
-    redirect("/login?next=/history");
+    return (
+      <HistoryClient initialData={[]} isLoggedIn={false} />
+    );
   }
 
   const { data, error } = await supabase
     .from("estimates")
-    .select("id, meal, portion, details, calories, protein_g, carbs_g, fat_g, created_at")
+    .select("id, meal, portion, details, calories, protein_g, carbs_g, fat_g, confidence, notes, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(LIMIT);
 
   const list = error ? [] : (data ?? []);
 
-  return <HistoryClient initialData={list} />;
+  return <HistoryClient initialData={list} isLoggedIn={true} />;
 }

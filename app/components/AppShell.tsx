@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       {/* Minimal top bar: logo left, Account/Login right */}
-      <header className="sticky top-0 z-20 flex min-h-[52px] items-center border-b border-zinc-200/60 bg-white/95 backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-950/95">
+      <header className="sticky top-0 z-20 flex min-h-[52px] items-center border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">
           <Link
             href="/"
@@ -115,7 +115,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Desktop: iOS-style segmented control in rounded pill */}
       <nav
-        className="hidden border-b border-zinc-200/60 bg-white/80 dark:border-zinc-800/60 dark:bg-zinc-950/80 sm:block"
+        className="hidden border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 sm:block"
         aria-label="Main navigation"
       >
         <div className="mx-auto flex w-full max-w-[1400px] justify-center px-4 py-3 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">
@@ -153,13 +153,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* Main content */}
-      <main className="min-h-[calc(100vh-140px)] flex-1 bg-gradient-to-b from-zinc-50 via-white to-emerald-50/30 py-6 pb-24 dark:from-zinc-950 dark:via-zinc-950 dark:to-emerald-950/20 sm:pb-10 lg:py-10 lg:pb-14">
-        <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">{children}</div>
+      <main className="min-h-[calc(100vh-140px)] flex-1 bg-zinc-50 py-6 pb-24 dark:bg-zinc-950 sm:pb-10 lg:py-10 lg:pb-14">
+        <div className="mx-auto w-full max-w-md px-4 sm:max-w-[1400px] sm:px-6 lg:px-10 xl:px-12 2xl:px-16">
+          {children}
+        </div>
       </main>
 
       {/* Mobile: bottom tab bar (Estimate / History / Account) */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-center border-t border-zinc-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/95 sm:hidden"
+        className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-center border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] pt-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 sm:hidden"
         aria-label="Main navigation"
       >
         <div className="mx-auto flex w-full max-w-[1400px] justify-around px-4 sm:px-6 lg:px-10 xl:px-12 2xl:px-16">
@@ -173,7 +175,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className={`flex flex-col items-center gap-1 rounded-xl px-6 py-2 transition-colors ${
                   active
                     ? "text-zinc-900 dark:text-zinc-50"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
                 }`}
               >
                 <Icon className="h-5 w-5 shrink-0" />

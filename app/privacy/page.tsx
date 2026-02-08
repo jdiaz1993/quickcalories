@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen px-4 py-8 bg-zinc-50 dark:bg-zinc-950">
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-md">
         <Link
           href="/"
           className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50"

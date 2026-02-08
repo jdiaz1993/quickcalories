@@ -11,17 +11,17 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
--- User can select only their row
+drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
   on public.profiles for select
   using (auth.uid() = user_id);
 
--- User can insert their row (e.g. on first signup)
+drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own"
   on public.profiles for insert
   with check (auth.uid() = user_id);
 
--- User can update only their row
+drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own"
   on public.profiles for update
   using (auth.uid() = user_id)
@@ -42,7 +42,7 @@ create index if not exists subscriptions_user_id_idx on public.subscriptions (us
 
 alter table public.subscriptions enable row level security;
 
--- User can select only their rows
+drop policy if exists "subscriptions_select_own" on public.subscriptions;
 create policy "subscriptions_select_own"
   on public.subscriptions for select
   using (auth.uid() = user_id);
@@ -68,23 +68,23 @@ create index if not exists estimates_created_at_idx on public.estimates (created
 
 alter table public.estimates enable row level security;
 
--- User can select only their rows
+drop policy if exists "estimates_select_own" on public.estimates;
 create policy "estimates_select_own"
   on public.estimates for select
   using (auth.uid() = user_id);
 
--- User can insert only their rows
+drop policy if exists "estimates_insert_own" on public.estimates;
 create policy "estimates_insert_own"
   on public.estimates for insert
   with check (auth.uid() = user_id);
 
--- User can update only their rows
+drop policy if exists "estimates_update_own" on public.estimates;
 create policy "estimates_update_own"
   on public.estimates for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- User can delete only their rows
+drop policy if exists "estimates_delete_own" on public.estimates;
 create policy "estimates_delete_own"
   on public.estimates for delete
   using (auth.uid() = user_id);
