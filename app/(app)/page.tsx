@@ -146,6 +146,14 @@ function HomeInner() {
   const [goalFatInput, setGoalFatInput] = useState("");
   const [goalSaving, setGoalSaving] = useState(false);
   const [goalError, setGoalError] = useState("");
+  const [barcodeCode, setBarcodeCode] = useState("");
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
+  const [barcodeResult, setBarcodeResult] = useState<EstimateResult | null>(null);
+  const [barcodeMealEdit, setBarcodeMealEdit] = useState("");
+  const [barcodeSavedToHistory, setBarcodeSavedToHistory] = useState(false);
+  const [barcodeSaveError, setBarcodeSaveError] = useState<string | null>(null);
+  const [barcodeLastCode, setBarcodeLastCode] = useState("");
 
   useEffect(() => {
     setUsageToday(getUsageToday());
@@ -551,6 +559,93 @@ function HomeInner() {
     setGoalEditOpen(false);
   }
 
+  async function handleBarcodeLookup() {
+    const code = barcodeCode.replace(/\D/g, "");
+    if (code.length < 8 || code.length > 14) {
+      setBarcodeError("Enter 8–14 digits");
+      return;
+    }
+    setBarcodeError(null);
+    setBarcodeResult(null);
+    setBarcodeLoading(true);
+    try {
+      const res = await fetch(`/api/barcode?code=${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setBarcodeError(data.error ?? "Lookup failed");
+        return;
+      }
+      const r = data.result;
+      setBarcodeResult({
+        calories: r.calories,
+        protein_g: r.protein_g,
+        carbs_g: r.carbs_g,
+        fat_g: r.fat_g,
+        confidence: r.confidence,
+        notes: r.notes ?? "",
+      });
+      setBarcodeMealEdit(r.meal ?? "");
+      setBarcodeLastCode(code);
+      setBarcodeSavedToHistory(false);
+      setBarcodeSaveError(null);
+    } catch {
+      setBarcodeError("Request failed");
+    } finally {
+      setBarcodeLoading(false);
+    }
+  }
+
+  async function handleSaveBarcodeToHistory() {
+    if (!barcodeResult) return;
+    const mealName = barcodeMealEdit.trim() || "Barcode product";
+    setBarcodeSaveError(null);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const { error } = await supabase.from("estimates").insert({
+        user_id: user.id,
+        meal: mealName,
+        portion: "medium",
+        details: `Barcode: ${barcodeLastCode}`,
+        calories: barcodeResult.calories,
+        protein_g: barcodeResult.protein_g,
+        carbs_g: barcodeResult.carbs_g,
+        fat_g: barcodeResult.fat_g,
+        confidence: barcodeResult.confidence,
+        notes: barcodeResult.notes ?? "",
+      });
+      if (error) {
+        setBarcodeSaveError(error.message);
+        return;
+      }
+      await loadToday();
+      setBarcodeSavedToHistory(true);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const raw = window.localStorage.getItem("quickcal_local_estimates");
+        const arr = raw ? JSON.parse(raw) : [];
+        arr.push({
+          id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          meal: mealName,
+          result: {
+            calories: barcodeResult.calories,
+            protein_g: barcodeResult.protein_g,
+            carbs_g: barcodeResult.carbs_g,
+            fat_g: barcodeResult.fat_g,
+          },
+          createdAt: new Date().toISOString(),
+        });
+        window.localStorage.setItem("quickcal_local_estimates", JSON.stringify(arr));
+        setBarcodeSavedToHistory(true);
+        void loadToday();
+      } catch {
+        setBarcodeSaveError("Could not save");
+      }
+    }
+  }
+
   const confidenceConfig = {
     low: { label: "Low confidence", className: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200" },
     medium: { label: "Medium confidence", className: "bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200" },
@@ -650,6 +745,46 @@ function HomeInner() {
             </div>
           </GlassCard>
 
+          {/* Scan Barcode (MVP) */}
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Scan Barcode (MVP)
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Enter barcode (UPC/EAN)"
+                value={barcodeCode}
+                onChange={(e) => {
+                  setBarcodeCode(e.target.value);
+                  if (barcodeError) setBarcodeError(null);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleBarcodeLookup()}
+                className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 placeholder-zinc-500 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-400"
+                aria-label="Barcode (UPC/EAN)"
+              />
+              <button
+                type="button"
+                onClick={() => void handleBarcodeLookup()}
+                disabled={barcodeLoading}
+                className="shrink-0 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
+              >
+                {barcodeLoading ? "…" : "Lookup"}
+              </button>
+            </div>
+            {barcodeError && (
+              <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+                {barcodeError}
+              </p>
+            )}
+          </div>
+          <div className="text-right text-[11px] text-zinc-500 dark:text-zinc-400">
+            <Link href="/barcode" className="font-medium text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300">
+              Use camera barcode scanner →
+            </Link>
+          </div>
+
           {/* Free estimates pill */}
           {!isPro && (
             <p className="text-center text-sm text-zinc-600 dark:text-zinc-400 lg:text-left">
@@ -660,13 +795,21 @@ function HomeInner() {
             </p>
           )}
 
-          {/* Primary button — desktop: under card */}
-          <div className="hidden sm:block">
-            <EstimateButton
-              onClick={() => handleEstimate()}
-              disabled={!meal.trim() || loading || atLimit}
-              loading={loading}
-            />
+          {/* Primary buttons — desktop: under card */}
+          <div className="hidden sm:flex sm:gap-3">
+            <Link
+              href="/scan"
+              className="flex min-w-0 flex-1 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-3 font-semibold text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+            >
+              Scan
+            </Link>
+            <div className="min-w-0 flex-1">
+              <EstimateButton
+                onClick={() => handleEstimate()}
+                disabled={!meal.trim() || loading || atLimit}
+                loading={loading}
+              />
+            </div>
           </div>
 
           {/* Limit reached */}
@@ -690,14 +833,67 @@ function HomeInner() {
 
         {/* Right column: Results + History — full width, consistent gap */}
         <div className="flex w-full flex-col gap-6">
-          {loading && (
+          {(loading || barcodeLoading) && (
             <div className="w-full animate-fade-slide-in">
               <ResultSkeleton />
             </div>
           )}
 
-          {/* Result card */}
-          {result !== null && !error && !loading && (
+          {/* Barcode result card */}
+          {barcodeResult && !barcodeLoading && (
+            <GlassCard className="w-full animate-fade-slide-in overflow-hidden p-6" aria-live="polite">
+              <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                Barcode lookup
+              </p>
+              <label className="mt-2 block">
+                <span className="sr-only">Edit product name</span>
+                <input
+                  type="text"
+                  value={barcodeMealEdit}
+                  onChange={(e) => setBarcodeMealEdit(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-lg font-bold text-zinc-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
+                  placeholder="Product name"
+                />
+              </label>
+              <div className="mt-4 flex flex-wrap items-baseline gap-3">
+                <p className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl">
+                  {barcodeResult.calories}
+                </p>
+                <span className="rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1 text-sm font-semibold text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                  kcal
+                </span>
+                <span className={`ml-auto rounded-full px-2.5 py-1 text-xs font-medium ${confidenceConfig[barcodeResult.confidence].className}`}>
+                  {confidenceConfig[barcodeResult.confidence].label}
+                </span>
+              </div>
+              <div className="mt-6 grid grid-cols-3 gap-4">
+                <MacroRing label="Protein" value={barcodeResult.protein_g} tint="protein" max={150} />
+                <MacroRing label="Carbs" value={barcodeResult.carbs_g} tint="carbs" max={250} />
+                <MacroRing label="Fat" value={barcodeResult.fat_g} tint="fat" max={80} />
+              </div>
+              {barcodeResult.notes && (
+                <p className="mt-4 text-xs text-zinc-600 dark:text-zinc-400">
+                  {barcodeResult.notes}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => void handleSaveBarcodeToHistory()}
+                disabled={barcodeSavedToHistory}
+                className="qc-button mt-4 w-auto px-4 py-2.5 text-sm disabled:opacity-70"
+              >
+                {barcodeSavedToHistory ? "Saved" : isLoggedIn ? "Save to history" : "Save to history"}
+              </button>
+              {barcodeSaveError && (
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+                  {barcodeSaveError}
+                </p>
+              )}
+            </GlassCard>
+          )}
+
+          {/* Result card (AI estimate) */}
+          {result !== null && !error && !loading && !barcodeResult && (
           <GlassCard
             className="w-full animate-fade-slide-in overflow-hidden p-6"
             aria-live="polite"
@@ -790,7 +986,7 @@ function HomeInner() {
           )}
 
           {/* Placeholder when no result yet (desktop) — avoids empty right column */}
-          {!loading && result === null && !error && (
+          {!loading && !barcodeLoading && result === null && !error && !barcodeResult && (
             <GlassCard className="hidden w-full min-h-[260px] flex-col justify-center p-8 lg:flex lg:min-h-[320px]" aria-hidden>
               <p className="text-center text-sm text-zinc-500 dark:text-zinc-400">
                 Enter a meal above and tap Estimate to see calories and macros here.
@@ -1017,11 +1213,21 @@ function HomeInner() {
 
       {/* Sticky action bar — mobile only */}
       <StickyActionBar>
-        <EstimateButton
-          onClick={() => handleEstimate()}
-          disabled={!meal.trim() || loading || atLimit}
-          loading={loading}
-        />
+        <div className="flex w-full gap-2">
+          <Link
+            href="/scan"
+            className="flex min-w-0 flex-1 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-3 font-semibold text-zinc-900 transition-colors hover:bg-zinc-50 active:scale-[0.98] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+          >
+            Scan
+          </Link>
+          <div className="min-w-0 flex-1">
+            <EstimateButton
+              onClick={() => handleEstimate()}
+              disabled={!meal.trim() || loading || atLimit}
+              loading={loading}
+            />
+          </div>
+        </div>
       </StickyActionBar>
     </div>
   );

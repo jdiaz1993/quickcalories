@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 
 const navLinkClass =
   "text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50";
+const navScanClass =
+  "inline-flex items-center rounded-full border border-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900";
 
 export function Navbar() {
   const router = useRouter();
@@ -46,6 +48,9 @@ export function Navbar() {
               <Link href="/history" className={navLinkClass}>
                 History
               </Link>
+              <Link href="/scan" className={navScanClass}>
+                Scan
+              </Link>
               <button
                 type="button"
                 onClick={() => void handleLogout()}
@@ -61,6 +66,9 @@ export function Navbar() {
               </Link>
               <Link href="/pricing" className={navLinkClass}>
                 Pricing
+              </Link>
+              <Link href="/scan" className={navScanClass}>
+                Scan
               </Link>
             </>
           )}
