@@ -8,6 +8,11 @@ function isProtectedPath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  // Let checkout route handle its own auth (Bearer token from app)
+  if (request.nextUrl.pathname === "/api/checkout") {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({ request });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
