@@ -53,10 +53,10 @@ async function lookupBarcode(code: string) {
   const has100 =
     calories100 > 0 || protein100 > 0 || carbs100 > 0 || fat100 > 0;
 
-  const calories = Math.round(hasServing ? caloriesServing : calories100);
-  const protein_g = Math.round(hasServing ? proteinServing : protein100);
-  const carbs_g = Math.round(hasServing ? carbsServing : carbs100);
-  const fat_g = Math.round(hasServing ? fatServing : fat100);
+  let calories = Math.round(hasServing ? caloriesServing : calories100);
+  let protein_g = Math.round(hasServing ? proteinServing : protein100);
+  let carbs_g = Math.round(hasServing ? carbsServing : carbs100);
+  let fat_g = Math.round(hasServing ? fatServing : fat100);
 
   const missing: string[] = [];
   if (calories === 0) missing.push("calories");
@@ -76,7 +76,7 @@ async function lookupBarcode(code: string) {
       : "Source: Open Food Facts.";
   const missingNote =
     missing.length > 0 ? ` Missing: ${missing.join(", ")}.` : "";
-  const notes = sourceNote + missingNote;
+  let notes = sourceNote + missingNote;
 
   const productName =
     product.product_name_en?.trim() ||
@@ -84,6 +84,16 @@ async function lookupBarcode(code: string) {
     "Product";
   const brand = product.brands?.trim() || "";
   const meal = brand ? `${brand} ${productName}`.trim() : productName;
+
+  // Treat very-low-calorie water as plain water
+  const nameForCheck = (productName + " " + brand).toLowerCase();
+  if (nameForCheck.includes("water") && calories <= 5) {
+    calories = 0;
+    protein_g = 0;
+    carbs_g = 0;
+    fat_g = 0;
+    notes += " Treated as plain water (0 kcal).";
+  }
 
   const result = {
     meal,
