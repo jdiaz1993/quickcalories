@@ -147,7 +147,7 @@ async function upsertSubscription(
     typeof sub.items.data[0]?.price === "string"
       ? sub.items.data[0]?.price
       : sub.items.data[0]?.price?.id ?? null;
-  const periodEndUnix = sub.current_period_end;
+  const periodEndUnix = (sub as { current_period_end?: number }).current_period_end;
   const periodEnd = periodEndUnix
     ? new Date(periodEndUnix * 1000).toISOString()
     : null;
