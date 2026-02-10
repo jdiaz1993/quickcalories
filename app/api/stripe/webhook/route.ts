@@ -35,6 +35,9 @@ export async function POST(request: Request) {
   // Process async so we can return 200 quickly; fire-and-forget
   void handleEvent(event);
 
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[webhook] received", event.type);
+  }
   return NextResponse.json({ received: true }, { status: 200 });
 }
 
@@ -62,7 +65,7 @@ async function handleEvent(event: Stripe.Event) {
             typeof session.subscription === "string"
               ? session.subscription
               : session.subscription?.id;
-          if (subId) await syncSubscription(supabase, subId, userId);
+          if (subId) await syncSubscription(supabase, subId, userId, customerId);
         }
         break;
       }
@@ -113,33 +116,42 @@ async function resolveUserId(
     .from("profiles")
     .select("user_id")
     .eq("stripe_customer_id", customerId)
-    .single();
+    .maybeSingle();
   return data?.user_id ?? null;
 }
 
 async function syncSubscription(
   supabase: ReturnType<typeof createAdminClient>,
   subscriptionId: string,
-  userId: string
+  userId: string,
+  customerId: string
 ) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
-  await upsertSubscription(supabase, userId, sub);
+  await upsertSubscription(supabase, userId, sub, customerId);
+}
+
+function getCustomerId(
+  customer: string | Stripe.Customer | Stripe.DeletedCustomer
+): string | null {
+  return typeof customer === "string" ? customer : (customer as Stripe.Customer)?.id ?? null;
 }
 
 async function upsertSubscription(
   supabase: ReturnType<typeof createAdminClient>,
   userId: string,
-  sub: Stripe.Subscription
+  sub: Stripe.Subscription,
+  customerId?: string | null
 ) {
   const priceId =
     typeof sub.items.data[0]?.price === "string"
       ? sub.items.data[0]?.price
       : sub.items.data[0]?.price?.id ?? null;
-  const periodEndUnix = (sub as { current_period_end?: number }).current_period_end;
+  const periodEndUnix = sub.current_period_end;
   const periodEnd = periodEndUnix
     ? new Date(periodEndUnix * 1000).toISOString()
     : null;
+  const stripeCustomerId = customerId ?? getCustomerId(sub.customer);
 
   await supabase.from("subscriptions").upsert(
     {
@@ -147,6 +159,8 @@ async function upsertSubscription(
       status: sub.status,
       price_id: priceId,
       current_period_end: periodEnd,
+      stripe_customer_id: stripeCustomerId ?? undefined,
+      stripe_subscription_id: sub.id,
     },
     { onConflict: "user_id" }
   );
