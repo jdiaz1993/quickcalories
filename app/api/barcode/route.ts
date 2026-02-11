@@ -17,6 +17,32 @@ function num(val: unknown): number {
   return 0;
 }
 
+/** True if OFF product is plain/mineral/purified water → force 0 kcal. */
+function isWaterProduct(product: Record<string, unknown>): boolean {
+  const nameParts = [
+    product.product_name,
+    product.product_name_en,
+    product.generic_name,
+    product.brands,
+  ].filter((x): x is string => typeof x === "string");
+  const name = nameParts.join(" ").toLowerCase() || "";
+  if (
+    /\bwater\b|mineral water|sparkling water|still water|spring water|drinking water|plain water|purified water/i.test(name) ||
+    /\beau\b|^eau\s|agua\b|aqua\b|wasser\b|voda\b/i.test(name)
+  )
+    return true;
+  const categories =
+    product.categories ?? product.categories_hierarchy ?? product.categories_tags;
+  const catStr = Array.isArray(categories)
+    ? categories.join(" ").toLowerCase()
+    : typeof categories === "string"
+      ? categories.toLowerCase()
+      : "";
+  if (/waters?|mineral.?water|bottled.?water|eaux?\b|aguas?\b/i.test(catStr))
+    return true;
+  return false;
+}
+
 async function lookupBarcode(code: string) {
   const res = await fetch(
     `https://world.openfoodfacts.org/api/v0/product/${code}.json`,
@@ -36,6 +62,25 @@ async function lookupBarcode(code: string) {
       { error: "Product not found" },
       { status: 404 }
     );
+  }
+
+  // Water (including purified water): return 0 kcal so we never use wrong OFF nutriments
+  if (isWaterProduct(product as Record<string, unknown>)) {
+    const namePart =
+      (typeof product.product_name === "string" && product.product_name.trim()) ||
+      (typeof product.brands === "string" && product.brands.trim());
+    const meal = namePart ? String(namePart).trim() : "Water";
+    return NextResponse.json({
+      result: {
+        meal,
+        calories: 0,
+        protein_g: 0,
+        carbs_g: 0,
+        fat_g: 0,
+        confidence: "medium",
+        notes: "Treated as water (0 kcal).",
+      },
+    });
   }
 
   const nutriments = product.nutriments ?? {};
@@ -84,16 +129,6 @@ async function lookupBarcode(code: string) {
     "Product";
   const brand = product.brands?.trim() || "";
   const meal = brand ? `${brand} ${productName}`.trim() : productName;
-
-  // Treat very-low-calorie water as plain water
-  const nameForCheck = (productName + " " + brand).toLowerCase();
-  if (nameForCheck.includes("water") && calories <= 5) {
-    calories = 0;
-    protein_g = 0;
-    carbs_g = 0;
-    fat_g = 0;
-    notes += " Treated as plain water (0 kcal).";
-  }
 
   const result = {
     meal,
