@@ -48,6 +48,19 @@ export async function GET() {
   return jsonWithCors({ ok: true });
 }
 
+const REQUIRED_ENV = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+  "REVENUECAT_SECRET_KEY",
+] as const;
+
+function getMissingEnv(): string[] {
+  return REQUIRED_ENV.filter((key) => {
+    const v = process.env[key];
+    return !v || (typeof v === "string" && v.trim() === "");
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const auth = request.headers.get("authorization");
@@ -57,28 +70,22 @@ export async function POST(request: NextRequest) {
       return jsonWithCors({ error: "Not authenticated" }, 401);
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !serviceRoleKey) {
+    const missing = getMissingEnv();
+    if (missing.length > 0) {
       return jsonWithCors(
-        { error: "Server configuration error" },
+        { error: "Missing environment variable", missing },
         500
       );
     }
 
     const supabase = createAdminClient();
+    // Validate JWT and get user via supabase.auth.getUser(accessToken)
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user?.id) {
       return jsonWithCors({ error: "Not authenticated" }, 401);
     }
 
-    const secretKey = process.env.REVENUECAT_SECRET_KEY;
-    if (!secretKey || !secretKey.trim()) {
-      return jsonWithCors(
-        { error: "RevenueCat not configured" },
-        500
-      );
-    }
+    const secretKey = process.env.REVENUECAT_SECRET_KEY!;
 
     const appUserId = encodeURIComponent(user.id);
     const rcRes = await fetch(`${REVENUECAT_API}/${appUserId}`, {
@@ -139,6 +146,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return jsonWithCors({ error: message }, 500);
+    return jsonWithCors(
+      { error: message, where: "/api/pro-status" },
+      500
+    );
   }
 }
