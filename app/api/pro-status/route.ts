@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const ENTITLEMENT_ID = "pro";
-const REVENUECAT_API = "https://api.revenuecat.com/v2/subscribers";
+const REVENUECAT_API = "https://api.revenuecat.com/v1/subscribers";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -73,7 +73,11 @@ export async function POST(request: NextRequest) {
     const missing = getMissingEnv();
     if (missing.length > 0) {
       return jsonWithCors(
-        { error: "Missing environment variable", missing },
+        {
+          error:
+            "Missing environment variable (REVENUECAT_SECRET_KEY must be a v1 secret key for the v1 subscribers endpoint)",
+          missing,
+        },
         500
       );
     }
