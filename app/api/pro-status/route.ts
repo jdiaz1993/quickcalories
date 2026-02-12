@@ -4,6 +4,24 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const ENTITLEMENT_ID = "pro";
 const REVENUECAT_API = "https://api.revenuecat.com/v1/subscribers";
 
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+function jsonWithCors(
+  body: unknown,
+  status = 200,
+  init?: ResponseInit
+): NextResponse {
+  return NextResponse.json(body, {
+    ...init,
+    status,
+    headers: { ...CORS_HEADERS, ...init?.headers },
+  });
+}
+
 interface RevenueCatEntitlement {
   expires_date: string | null;
   [key: string]: unknown;
@@ -19,41 +37,46 @@ interface RevenueCatResponse {
   [key: string]: unknown;
 }
 
-export async function GET(request: NextRequest) {
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  });
+}
+
+export async function GET() {
+  return jsonWithCors({ ok: true });
+}
+
+export async function POST(request: NextRequest) {
   try {
     const auth = request.headers.get("authorization");
     const token =
       auth?.startsWith("Bearer ") ? auth.slice(7).trim() : null;
     if (!token) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
+      return jsonWithCors({ error: "Not authenticated" }, 401);
     }
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !serviceRoleKey) {
-      return NextResponse.json(
+      return jsonWithCors(
         { error: "Server configuration error" },
-        { status: 500 }
+        500
       );
     }
 
     const supabase = createAdminClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user?.id) {
-      return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
-      );
+      return jsonWithCors({ error: "Not authenticated" }, 401);
     }
 
     const secretKey = process.env.REVENUECAT_SECRET_KEY;
     if (!secretKey || !secretKey.trim()) {
-      return NextResponse.json(
+      return jsonWithCors(
         { error: "RevenueCat not configured" },
-        { status: 500 }
+        500
       );
     }
 
@@ -69,19 +92,16 @@ export async function GET(request: NextRequest) {
     if (!rcRes.ok) {
       const body = await rcRes.text();
       const message = body || rcRes.statusText || "RevenueCat request failed";
-      return NextResponse.json(
-        { error: message },
-        { status: 502 }
-      );
+      return jsonWithCors({ error: message }, 502);
     }
 
     let raw: unknown;
     try {
       raw = await rcRes.json();
     } catch {
-      return NextResponse.json(
+      return jsonWithCors(
         { error: "Invalid response from RevenueCat" },
-        { status: 502 }
+        502
       );
     }
     const rcData = (raw as { value?: RevenueCatResponse }).value ?? (raw as RevenueCatResponse);
@@ -112,16 +132,13 @@ export async function GET(request: NextRequest) {
       { onConflict: "user_id" }
     );
 
-    return NextResponse.json({
+    return jsonWithCors({
       isPro: isActive,
       current_period_end,
       provider: "revenuecat",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return jsonWithCors({ error: message }, 500);
   }
 }
