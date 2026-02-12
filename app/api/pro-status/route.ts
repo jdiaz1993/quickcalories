@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const ENTITLEMENT_ID = "pro";
-const REVENUECAT_API = "https://api.revenuecat.com/v1/subscribers";
+const REVENUECAT_API = "https://api.revenuecat.com/v2/subscribers";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
