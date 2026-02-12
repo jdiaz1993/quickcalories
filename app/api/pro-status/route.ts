@@ -97,8 +97,25 @@ export async function POST(request: NextRequest) {
     });
 
     if (!rcRes.ok) {
-      const body = await rcRes.text();
-      const message = body || rcRes.statusText || "RevenueCat request failed";
+      const text = await rcRes.text();
+      let errorType: string | undefined;
+      try {
+        const parsed = JSON.parse(text) as { error?: { type?: string } };
+        errorType = parsed?.error?.type;
+      } catch {
+        // ignore JSON parse errors; fall back to status-only handling
+      }
+
+      if (rcRes.status === 404 || errorType === "resource_missing") {
+        // No subscriber in RevenueCat → treat as non-Pro
+        return jsonWithCors({
+          isPro: false,
+          current_period_end: null,
+          provider: "revenuecat",
+        });
+      }
+
+      const message = text || rcRes.statusText || "RevenueCat request failed";
       return jsonWithCors({ error: message }, 502);
     }
 
