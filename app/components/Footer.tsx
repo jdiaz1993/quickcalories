@@ -13,6 +13,9 @@ export function Footer() {
         <Link href="/refunds" className="hover:text-zinc-900 dark:hover:text-zinc-50">
           Refunds
         </Link>
+        <Link href="/support" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+          Support
+        </Link>
       </div>
     </footer>
   );
