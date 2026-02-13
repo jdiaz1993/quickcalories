@@ -43,10 +43,10 @@ export default function PrivacyPage() {
             <p className="mt-2 leading-relaxed">
               For privacy-related questions, contact us at{" "}
               <a
-                href="mailto:privacy@quickcalories.com"
+                href="mailto:quickcalories@gmail.com"
                 className="font-medium text-zinc-900 underline dark:text-zinc-50"
               >
-                privacy@quickcalories.com
+                quickcalories@gmail.com
               </a>
               .
             </p>

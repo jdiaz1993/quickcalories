@@ -42,10 +42,10 @@ export default function SupportPage() {
             <p className="mt-2 leading-relaxed">
               For technical issues, billing questions, or feedback, email us at{" "}
               <a
-                href="mailto:support@quickcalories.com"
+                href="mailto:quickcalories@gmail.com"
                 className="font-medium text-zinc-900 underline dark:text-zinc-50"
               >
-                support@quickcalories.com
+                quickcalories@gmail.com
               </a>
               . We’ll get back to you as soon as we can.
             </p>

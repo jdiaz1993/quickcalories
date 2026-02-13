@@ -56,10 +56,10 @@ export default function TermsPage() {
             <p className="mt-2 leading-relaxed">
               Questions about these terms? Email us at{" "}
               <a
-                href="mailto:support@quickcalories.com"
+                href="mailto:quickcalories@gmail.com"
                 className="font-medium text-zinc-900 underline dark:text-zinc-50"
               >
-                support@quickcalories.com
+                quickcalories@gmail.com
               </a>
               .
             </p>

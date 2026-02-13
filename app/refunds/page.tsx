@@ -52,10 +52,10 @@ export default function RefundsPage() {
             <p className="mt-2 leading-relaxed">
               Refund requests:{" "}
               <a
-                href="mailto:refunds@quickcalories.com"
+                href="mailto:quickcalories@gmail.com"
                 className="font-medium text-zinc-900 underline dark:text-zinc-50"
               >
-                refunds@quickcalories.com
+                quickcalories@gmail.com
               </a>
               . Include the email used at checkout and the approximate date of charge.
             </p>
